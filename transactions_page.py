@@ -20,7 +20,6 @@ class TransactionsFrame(ctk.CTkScrollableFrame):
 
     def show_receipt(self, transaction_id):
         """Показывает чек для указанной транзакции"""
-        # SQL запрос на поиск транзакции
         transaction = session.query(TransactionsTable).filter_by(transaction_id=transaction_id).first()
         
         if transaction and transaction.check_photo:
@@ -47,6 +46,10 @@ class TransactionsFrame(ctk.CTkScrollableFrame):
             
 
     def update_frame(self):
+        # Очищаем текущие виджеты
+        for widget in self.winfo_children():
+            widget.destroy()
+
         transactions = (
             session.query(TransactionsTable)
             .order_by(TransactionsTable.transaction_date_time.desc())
@@ -74,11 +77,10 @@ class TransactionsFrame(ctk.CTkScrollableFrame):
         if not transactions_history:
             ctk.CTkLabel(self, text="Нет транзакций за выбранный период", font=("Arial", 20)).pack(padx=20, pady=20)
             return
-        # Заголовки таблицы
-        headers = list(transactions_history[0].keys())
-        headers.remove("transaction_id")  # Убираем ID из заголовков
-        headers.append("Действия")  # Добавляем колонку для действий
-
+        
+        # Заголовки таблицы (без "Действия")
+        headers = ["Счёт", "Дата", "Категория", "Сумма", "Комментарий", "Чек"]
+        
         for col, name in enumerate(headers):
             label = ctk.CTkLabel(self, text=name, text_color="black", font=("Arial", 16, "bold"))
             label.grid(row=0, column=col, sticky="nsew", padx=10, pady=10)
@@ -86,62 +88,58 @@ class TransactionsFrame(ctk.CTkScrollableFrame):
         # Данные транзакций
         for i, tr in enumerate(transactions_history):
             row = i + 1
-            col = 0
             
-            # Проходим по всем полям кроме transaction_id
-            for key, value in tr.items():
-                if key == "transaction_id":
-                    continue
-                    
-                text_color = "black"
-
-                if key == "Сумма":
-                    text_color = "red" if value["Тип"] == "Расход" else "green"
-                    value = f"{value['Количество']:,.2f}"
-
-                if key == "Категория":
-                    text_color = value["Цвет"]
-                    value = value["Имя"]
-
-                if key == "Счёт":
-                    icon_image = Image.open(resource_path(f"assets/{tr['Счёт']}"))
-                    label = ctk.CTkLabel(self, image=ctk.CTkImage(light_image=icon_image, size=(30, 30)), text="",
-                                         compound="left", font=("Arial", 16))
-                elif key == "Чек":
-                    # Показываем иконку вместо текста
-                    if value:  # Если чек есть
-                        receipt_icon = ctk.CTkImage(light_image=Image.open(resource_path("assets/icons/receipt.png")), size=(20, 20))
-                        label = ctk.CTkLabel(self, image=receipt_icon, text="", font=("Arial", 16))
-                    else:  # Если чека нет
-                        label = ctk.CTkLabel(self, text="—", text_color="gray", font=("Arial", 16))
-                else:
-                    label = ctk.CTkLabel(self, text=value, text_color=text_color, font=("Arial", 16), wraplength=200)
-                
-                label.grid(row=row, column=col, sticky="nsew", padx=10, pady=10)
-                col += 1
-
-            # Колонка "Действия" - кнопка просмотра чека
+            # Счёт
+            icon_image = Image.open(resource_path(f"assets/{tr['Счёт']}"))
+            account_label = ctk.CTkLabel(self, image=ctk.CTkImage(light_image=icon_image, size=(30, 30)), text="",
+                                        compound="left", font=("Arial", 16))
+            account_label.grid(row=row, column=0, sticky="nsew", padx=10, pady=10)
+            
+            # Дата
+            date_label = ctk.CTkLabel(self, text=tr["Дата"], text_color="black", font=("Arial", 16))
+            date_label.grid(row=row, column=1, sticky="nsew", padx=10, pady=10)
+            
+            # Категория
+            cat_color = tr["Категория"]["Цвет"]
+            cat_name = tr["Категория"]["Имя"]
+            category_label = ctk.CTkLabel(self, text=cat_name, text_color=cat_color, font=("Arial", 16))
+            category_label.grid(row=row, column=2, sticky="nsew", padx=10, pady=10)
+            
+            # Сумма
+            amount_color = "red" if tr["Сумма"]["Тип"] == "Расход" else "green"
+            amount_value = f"{tr['Сумма']['Количество']:,.2f}"
+            amount_label = ctk.CTkLabel(self, text=amount_value, text_color=amount_color, 
+                                       font=("Arial", 16, "bold"))
+            amount_label.grid(row=row, column=3, sticky="nsew", padx=10, pady=10)
+            
+            # Комментарий
+            comment_text = tr["Комментарий"] if tr["Комментарий"] else "—"
+            comment_label = ctk.CTkLabel(self, text=comment_text, text_color="black", 
+                                        font=("Arial", 16), wraplength=150)
+            comment_label.grid(row=row, column=4, sticky="nsew", padx=10, pady=10)
+            
+            # Чек (кликабельная иконка)
             if tr["Чек"]:  # Если чек есть
-                receipt_btn = ctk.CTkButton(
+                receipt_icon = ctk.CTkImage(
+                    light_image=Image.open(resource_path("assets/icons/receipt.png")), 
+                    size=(30, 30)
+                )
+                
+                # Создаем кнопку с иконкой вместо метки
+                receipt_button = ctk.CTkButton(
                     self, 
-                    text="Просмотреть чек", 
-                    width=100,
-                    height=30,
-                    font=("Arial", 12),
+                    text="", 
+                    image=receipt_icon,
+                    width=40,
+                    height=40,
+                    fg_color="transparent",
+                    hover_color="#d3d3d3",  # Светло-серый при наведении
                     command=lambda tid=tr["transaction_id"]: self.show_receipt(tid)
                 )
+                receipt_button.grid(row=row, column=5, padx=10, pady=10)  # Убрали sticky="center"
             else:  # Если чека нет
-                receipt_btn = ctk.CTkButton(
-                    self, 
-                    text="Нет чека", 
-                    width=100,
-                    height=30,
-                    font=("Arial", 12),
-                    state="disabled",
-                    fg_color="gray"
-                )
-            
-            receipt_btn.grid(row=row, column=col, sticky="", padx=10, pady=10)
+                no_receipt_label = ctk.CTkLabel(self, text="—", text_color="gray", font=("Arial", 16))
+                no_receipt_label.grid(row=row, column=5, padx=10, pady=10)  # Убрали sticky="center"
        
 
 
