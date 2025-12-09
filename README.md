@@ -14,7 +14,7 @@
 Для запуска приложения следует:
 - Клонировать репозиторий
 ```bash
-git clone https://github.com/my10ma10/Finance_application
+git clone https://github.com/inverse888/desktop-tutorial
 ```
 - Установить библиотеку PyInstaller
 ```bash
