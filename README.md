@@ -20,11 +20,22 @@ git clone https://github.com/my10ma10/Finance_application
 ```bash
 pip install pyinstaller
 ```
-- Скомпилировать файл
+- Установить зависимости
 ```bash
-pyinstaller main.py --onefile --noconsole --icon=assets/icons/asset-management.ico --add-data "assets/icons/categories;assets/icons/categories" --clean
+pip install -r requirements.txt
 ```
-- Запустить файл main.exe в папке Finance_application\dist
+
+- Создать базу данных postgresSql, таблицы и заполнить их
+```
+открыть редактор запросов pgAdmin Tool и выполнить запросы из файла DB/practice_db_upd.sql
+```
+
+- собрать исполняемый файл
+```bash
+pyinstaller main.py --onefile --noconsole --icon=assets/icons/asset-management.ico --add-data "assets/icons/asset-management.ico;assets/icons" --add-data "assets/icons/categories;assets/icons/categories" --add-data "assets/icons/sidebar;assets/icons/sidebar" --add-data "assets/icons;assets/icons" --clean
+```
+- 
+Запустить файл main.exe в папке Finance_application\dist
 
 # Авторы
-***Соколов Н.Д.*** — *sokol28.nik@gmail.com*
+***Корчагин А.И.*** — *korchalex82@gmail.com*
