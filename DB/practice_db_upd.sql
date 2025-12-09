@@ -1,8 +1,8 @@
-
-drop table Transfers;
-drop table Transactions;
-drop table Categories;
-drop table Accounts;
+--чтобы пересоздать базу нужны
+--drop table Transfers;
+--drop table Transactions;
+--drop table Categories;
+--drop table Accounts;
 
 
 CREATE TYPE account_type AS ENUM ('Обычный', 'Кредитный', 'Накопительный');
@@ -47,13 +47,13 @@ CREATE TABLE Transfers (
 );
 
 
+--удаление всех данных, и сброс счетчика 
+--TRUNCATE TABLE Transfers, Transactions, Categories, Accounts RESTART IDENTITY CASCADE;
 
-TRUNCATE TABLE Transfers, Transactions, Categories, Accounts RESTART IDENTITY CASCADE;
-
-delete  from Accounts;
-delete from Categories;
-delete from Transactions;
-delete from Transfers;
+--delete  from Accounts;
+--delete from Categories;
+--delete from Transactions;
+--delete from Transfers;
 
 -- 1. Сначала вставляем Accounts
 INSERT INTO Accounts (type, amount, icon_url, description) VALUES
