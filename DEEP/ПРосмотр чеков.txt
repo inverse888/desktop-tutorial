@@ -1,0 +1,37 @@
+def show_receipt(transaction_id):
+    """Показывает чек для указанной транзакции"""
+    transaction = session.query(TransactionsTable).filter_by(transaction_id=transaction_id).first()
+    
+    if transaction and transaction.check_photo:
+        try:
+            # Создаем временный файл для просмотра
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
+                temp_file.write(transaction.check_photo)
+                temp_path = temp_file.name
+            
+            # Открываем изображение средствами системы
+            import subprocess
+            import platform
+            import os
+            
+            if platform.system() == 'Darwin':  # macOS
+                subprocess.call(('open', temp_path))
+            elif platform.system() == 'Windows':  # Windows
+                os.startfile(temp_path)
+            else:  # linux variants
+                subprocess.call(('xdg-open', temp_path))
+                
+        except Exception as e:
+            CTkMessagebox.messagebox(title="Ошибка!", text=f"Не удалось открыть чек: {str(e)}")
+    else:
+        CTkMessagebox.messagebox(title="Информация", text="Чек не найден")
+5. Обновление интерфейса просмотра транзакций
+В вашем основном интерфейсе, где показываются транзакции, добавьте кнопку для просмотра чеков:
+
+python
+# В классе, отвечающем за отображение списка транзакций
+def add_receipt_button(self, transaction_id):
+    receipt_btn = ctk.CTkButton(self, text="Просмотреть чек", width=80,
+                               command=lambda: show_receipt(transaction_id))
+    return receipt_btn
