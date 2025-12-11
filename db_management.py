@@ -3,7 +3,13 @@ from sqlalchemy import (create_engine, Text, Column, Integer, Numeric,
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 import datetime
 
-engine = create_engine('postgresql+psycopg2://postgres:3648@localhost:5432/finances_accounting')
+# Импортируем конфигурацию из отдельного файла
+from db_config import get_connection_string
+
+# Создаем подключение с использованием конфигурации из db_config.py
+engine = create_engine(get_connection_string())
+
+#engine = create_engine('postgresql+psycopg2://postgres:3648@localhost:5432/finances_accounting')
 Session = sessionmaker(autoflush=False, bind=engine)
 session = Session()
 

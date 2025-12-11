@@ -77,6 +77,7 @@ class ColorPaletteFrame(ctk.CTkFrame):
         if hasattr(self.master, 'update_color_preview'):
             self.master.update_color_preview(color)
 
+
 class IconsListFrame(ctk.CTkScrollableFrame):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
@@ -169,17 +170,47 @@ class CategoryCreationPage(ctk.CTkToplevel):
 
         # Название категории
         self.name_entry = ctk.CTkEntry(self, placeholder_text="Название категории", 
-                                      placeholder_text_color="grey", font=("Arial", 14))
+                                      placeholder_text_color="white", font=("Arial", 14))
         self.name_entry.grid(row=1, column=1, sticky="nwe", padx=10, pady=10)
 
         # Палитра цветов
         self.color_palette = ColorPaletteFrame(self)
         self.color_palette.grid(row=2, column=1, sticky="nsew", padx=10, pady=10)
         
-        # Метка выбранного цвета
-        self.color_preview = ctk.CTkLabel(self, text="Цвет не выбран", font=("Arial", 12), 
-                                         text_color="black", height=30, fg_color="gray")
-        self.color_preview.grid(row=3, column=1, sticky="nwe", padx=10, pady=10)
+        # Фрейм для отображения и ввода цвета
+        self.color_preview_frame = ctk.CTkFrame(self, fg_color="transparent", height=40)
+        self.color_preview_frame.grid(row=3, column=1, sticky="nwe", padx=10, pady=10)
+        self.color_preview_frame.grid_propagate(False)
+        
+        # Настраиваем grid для фрейма
+        self.color_preview_frame.grid_columnconfigure(0, weight=0)
+        self.color_preview_frame.grid_columnconfigure(1, weight=1)
+        self.color_preview_frame.grid_rowconfigure(0, weight=1)
+        
+        # Цветной квадратик
+        self.color_display = ctk.CTkLabel(
+            self.color_preview_frame, 
+            text="", 
+            width=40, 
+            height=30,
+            fg_color="#808080",  # Серый по умолчанию
+            corner_radius=5
+        )
+        self.color_display.grid(row=0, column=0, padx=(0, 10), sticky="w")
+        
+        # Поле ввода для HEX цвета - БЕЗ ВАЛИДАЦИИ НА МОМЕНТ ВВОДА
+        self.color_entry = ctk.CTkEntry(
+            self.color_preview_frame,
+            placeholder_text="#96CEB4",
+            placeholder_text_color="white",
+            justify="center"
+        )
+        self.color_entry.grid(row=0, column=1, sticky="ew", padx=(0, 0))
+        
+        # Привязываем события - ТОЛЬКО КОНЕЦ ВВОДА
+        self.color_entry.bind("<KeyRelease>", self.on_color_entry_changed)
+        self.color_entry.bind("<FocusOut>", self.on_color_entry_changed)
+        self.color_entry.bind("<Return>", self.on_color_entry_changed)
 
         # Кнопка добавления
         self.add_category_button = ctk.CTkButton(self, text="Добавить категорию", 
@@ -191,17 +222,87 @@ class CategoryCreationPage(ctk.CTkToplevel):
         self.icons_list = IconsListFrame(self)
         self.icons_list.grid(row=0, column=0, rowspan=5, sticky="nsew", padx=10, pady=10)
 
+    def validate_hex_color(self, color_text):
+        """Проверяет валидность HEX цвета ПОСЛЕ ввода"""
+        if not color_text:
+            return False
+        
+        # Должен начинаться с #
+        if not color_text.startswith("#"):
+            return False
+        
+        # Проверяем длину (3, 6 или 8 символов после #)
+        if len(color_text) not in [4, 7, 9]:  # #RGB, #RRGGBB, #RRGGBBAA
+            return False
+        
+        # Проверяем допустимые символы
+        valid_chars = set("#0123456789abcdefABCDEF")
+        if not all(c in valid_chars for c in color_text[1:]):
+            return False
+        
+        # Проверяем, можно ли преобразовать в цвет
+        try:
+            ImageColor.getrgb(color_text)
+            return True
+        except ValueError:
+            return False
+
+    def on_color_entry_changed(self, event=None):
+        """Обработка изменения текста в поле ввода"""
+        color_text = self.color_entry.get().strip()
+        
+        if not color_text:
+            # Если поле пустое, сбрасываем цвет
+            self.color_display.configure(fg_color="#808080")
+            self.selected_color = None
+            return
+        
+        # Пробуем добавить # если его нет
+        if not color_text.startswith("#") and len(color_text) in [3, 6, 8]:
+            color_text = "#" + color_text
+            self.color_entry.delete(0, "end")
+            self.color_entry.insert(0, color_text)
+        
+        # Проверяем валидность цвета
+        if self.validate_hex_color(color_text):
+            try:
+                # Устанавливаем цвет
+                self.update_color_preview(color_text)
+                
+                # Обновляем палитру, если такой цвет есть
+                for button in self.color_palette.color_buttons:
+                    if button.cget("fg_color").lower() == color_text.lower():
+                        button.select()
+                        break
+            except ValueError:
+                # Неправильный цвет
+                pass
+        else:
+            # Если цвет невалидный, не обновляем цветной квадратик
+            # но оставляем текст в поле ввода для редактирования
+            pass
+
     def update_color_preview(self, color):
         """Обновляет отображение выбранного цвета"""
         self.selected_color = color  # Сохраняем выбранный цвет
-        self.color_preview.configure(text=f"Выбранный цвет: {color}", fg_color=color)
+        self.color_display.configure(fg_color=color)
+        
+        # Обновляем текст в поле ввода, если он не совпадает
+        current_text = self.color_entry.get().strip()
+        if current_text.upper() != color.upper():
+            self.color_entry.delete(0, "end")
+            self.color_entry.insert(0, color.upper())
+        
+        # Обновляем цвет иконок
         self.icons_list.update_icons_color(color)
 
     def add_category(self):
         new_name = self.name_entry.get()
         new_category_type = self.exp_inc_buttons.status
         new_icon_name = self.icons_list.selected_name
-        new_color = self.selected_color  # Используем атрибут класса
+        
+        # Получаем цвет из поля ввода
+        new_color = self.color_entry.get().strip()
 
         if not new_icon_name:
             CTkMessagebox.messagebox(title="Ошибка!", text="Выберите иконку для категории!")
@@ -210,7 +311,12 @@ class CategoryCreationPage(ctk.CTkToplevel):
             CTkMessagebox.messagebox(title="Ошибка!", text="Введите название категории!")
             return
         if not new_color:
-            CTkMessagebox.messagebox(title="Ошибка!", text="Выберите цвет для категории!")
+            CTkMessagebox.messagebox(title="Ошибка!", text="Выберите или введите цвет для категории!")
+            return
+        
+        # Проверяем валидность цвета
+        if not self.validate_hex_color(new_color):
+            CTkMessagebox.messagebox(title="Ошибка!", text="Введите корректный цвет в формате HEX!")
             return
 
         existing = session.query(CategoriesTable).filter_by(category_name=new_name).first()

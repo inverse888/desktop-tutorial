@@ -34,7 +34,7 @@ CREATE TABLE Transactions (
     transaction_date_time TIMESTAMP NOT NULL DEFAULT NOW(),
     amount NUMERIC(10, 2) NOT NULL DEFAULT 0.0,
 	description TEXT,
-    check_photo_url BYTEA
+    check_photo BYTEA
 );
 
 CREATE TABLE Transfers (
@@ -103,3 +103,4 @@ INSERT INTO Transactions (account_id, category_id, transaction_type, transaction
 INSERT INTO Transfers (from_account, to_account, transfer_date_time, amount, description) VALUES
 (1, 2, '2025-11-11 11:00:00', 10000.00, 'Пополнение накопительного счета'),
 (2, 1, '2025-11-10 10:30:00', 2000.00, 'Снятие с накопительного счета');
+

@@ -33,7 +33,7 @@ class IconsManagementFrame(ctk.CTkFrame):
         self.icons_info_label.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 10))
         
         # Кнопка замены иконок
-        self.replace_icons_button = ctk.CTkButton(self, text="Заменить иконки", 
+        self.replace_icons_button = ctk.CTkButton(self, text="Добавить иконки", 
                                                 font=("Arial", 16), text_color="black",
                                                 command=self.replace_icons,
                                                 height=40)

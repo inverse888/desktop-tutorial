@@ -138,7 +138,7 @@ class TransactionsFrame(ctk.CTkScrollableFrame):
                 )
                 receipt_button.grid(row=row, column=5, padx=10, pady=10)  # Убрали sticky="center"
             else:  # Если чека нет
-                no_receipt_label = ctk.CTkLabel(self, text="—", text_color="gray", font=("Arial", 16))
+                no_receipt_label = ctk.CTkLabel(self, text="—", text_color="white", font=("Arial", 16))
                 no_receipt_label.grid(row=row, column=5, padx=10, pady=10)  # Убрали sticky="center"
        
 
