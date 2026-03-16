@@ -134,6 +134,7 @@ class NewTransferWindow(ctk.CTkToplevel):
             date = datetime.datetime.combine(self.pop_up_calendar.frame.date_range[0], datetime.time.min).date()
         else:
             date = datetime.date.today()
+        
         hours = int(self.hour_entry.get()) if self.hour_entry.get() else 0
         minutes = int(self.minute_entry.get()) if self.minute_entry.get() else 0
         seconds = int(self.second_entry.get()) if self.second_entry.get() else 0
@@ -142,28 +143,42 @@ class NewTransferWindow(ctk.CTkToplevel):
             CTkMessagebox.messagebox(title="Ошибка!", text="Неверное время!")
             return
 
-        date_time = datetime.datetime.combine(date, datetime.time(
-            int(self.hour_entry.get() or 0),
-            int(self.minute_entry.get() or 0),
-            int(self.second_entry.get() or 0)
-        ))
-        amount = Decimal(self.amount_entry.amount)
-        description = self.comment_entry.get()
+        date_time = datetime.datetime.combine(date, datetime.time(hours, minutes, seconds))
+        
+        # Получаем значение суммы через get() вместо amount
+        amount_str = self.amount_entry.get()
+        
+        # Проверяем, что сумма не пустая
+        if not amount_str:
+            CTkMessagebox.messagebox(title="Ошибка!", text="Введите сумму!")
+            return
+        
+        try:
+            # Преобразуем строку в Decimal, заменяя запятую на точку, если нужно
+            amount_str = amount_str.replace(',', '.')
+            amount = Decimal(amount_str)
+        except:
+            CTkMessagebox.messagebox(title="Ошибка!", text="Некорректный формат суммы!")
+            return
 
+        description = self.comment_entry.get()
 
         if not self.from_acc_name or not self.to_acc_name:
             CTkMessagebox.messagebox(title="Ошибка!", text="Выберите иконку счёта!")
             return
-        if not amount:
-            CTkMessagebox.messagebox(title="Ошибка!", text="Введите сумму!")
+        
+        # Проверяем, что сумма положительная
+        if amount <= 0:
+            CTkMessagebox.messagebox(title="Ошибка!", text="Сумма должна быть больше нуля!")
             return
-        if not date:
-            CTkMessagebox.messagebox(title="Ошибка!", text="Укажите дату!")
-            return
-
 
         from_account = session.query(AccountsTable).filter_by(description=self.from_acc_name).first()
         to_account = session.query(AccountsTable).filter_by(description=self.to_acc_name).first()
+        
+        # Проверяем, что на счету достаточно средств
+        if from_account.amount < amount:
+            CTkMessagebox.messagebox(title="Ошибка!", text=f"Недостаточно средств на счёте {self.from_acc_name}!")
+            return
 
         transfer = TransfersTable(
             from_account=from_account.account_id,
@@ -173,7 +188,6 @@ class NewTransferWindow(ctk.CTkToplevel):
             description=description
         )
 
-        amount = Decimal(self.amount_entry.amount)
         from_account.amount -= amount
         to_account.amount += amount
 

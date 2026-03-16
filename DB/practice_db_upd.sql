@@ -61,18 +61,14 @@ INSERT INTO Accounts (type, amount, icon_url, description) VALUES
 ('Кредитный', 15000.50, 'icons/sidebar/credit-card.png', 'Кредитка'),
 ('Накопительный', 75000.00, 'icons/categories/piggybank.png', 'Накопительный счет на отпуск');
 
--- 2. Проверяем какие ID получились
-SELECT account_id, type FROM Accounts;
+
 
 -- 3. Затем вставляем Categories
 INSERT INTO Categories (category_name, colour, transaction_type, icon_url) VALUES
--- Доходы (зеленые оттенки)
 ('Зарплата', '#2E7D32', 'Доход', 'icons/categories/document.png'),
 ('Фриланс', '#388E3C', 'Доход', 'icons/categories/document.png'),
 ('Инвестиции', '#1B5E20', 'Доход', 'icons/categories/bank.png'),
 ('Дивиденды', '#43A047', 'Доход', 'icons/categories/bank.png'),
-
--- Расходы (разные оттенки для лучшего визуального разделения)
 ('Продукты', '#D32F2F', 'Расход', 'icons/categories/goods.png'),
 ('Транспорт', '#1976D2', 'Расход', 'icons/categories/car.png'),
 ('Общественный транспорт', '#0288D1', 'Расход', 'icons/categories/train.png'),

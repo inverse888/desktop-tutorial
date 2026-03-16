@@ -1,4 +1,8 @@
 from datetime import date
+import tempfile
+import os
+import platform
+import subprocess
 
 import customtkinter as ctk
 from PIL import Image
@@ -81,7 +85,6 @@ class AccountEntityFrame(ctk.CTkScrollableFrame):
             acc_index += 1
 
 
-
 class AccountsFrame(ctk.CTkScrollableFrame):
     def __init__(self, master, app_instance, **kwargs):
         super().__init__(master, **kwargs)
@@ -132,41 +135,109 @@ class AccountsFrame(ctk.CTkScrollableFrame):
 
         self.new_transfer.bind("<<DateSelected>>", lambda x: self.new_transfer.destroy())
 
+
 class TransactionsFrame(ctk.CTkScrollableFrame):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
 
         self.configure(fg_color="#aba6a6")
-        self.grid_rowconfigure(0, weight=1)
-
-        self.label = ctk.CTkLabel(self, text_color="black", text="Транзакции", font=("Arial", 18, "bold"))
-        self.label.grid(row=0, column=0, padx=20, pady=20)
+        
+        # Настройка колонок для правильного распределения пространства
+        self.grid_columnconfigure(0, weight=0)  # Иконка - фиксированная ширина
+        self.grid_columnconfigure(1, weight=3)  # Название/комментарий - больше места
+        self.grid_columnconfigure(2, weight=0)  # Дата - фиксированная ширина
+        self.grid_columnconfigure(3, weight=1)  # Сумма - меньше места
 
         self.update_frame()
 
+    def show_receipt(self, transaction_id):
+        """Показывает чек для указанной транзакции"""
+        transaction = session.query(TransactionsTable).filter_by(transaction_id=transaction_id).first()
+        
+        if transaction and transaction.check_photo:
+            try:
+                # Создаем временный файл для просмотра
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
+                    temp_file.write(transaction.check_photo)
+                    temp_path = temp_file.name
+                
+                # Открываем изображение средствами системы
+                if platform.system() == 'Darwin':  # macOS
+                    subprocess.call(('open', temp_path))
+                elif platform.system() == 'Windows':  # Windows
+                    os.startfile(temp_path)
+                else:  # linux variants
+                    subprocess.call(('xdg-open', temp_path))
+                    
+            except Exception as e:
+                from CustomTkinterMessagebox import CTkMessagebox
+                CTkMessagebox.messagebox(title="Ошибка!", text=f"Не удалось открыть чек: {str(e)}")
+        else:
+            from CustomTkinterMessagebox import CTkMessagebox
+            CTkMessagebox.messagebox(title="Информация", text="Чек не найден")
+
     def update_frame(self):
+        # Очищаем текущие виджеты
+        for widget in self.winfo_children():
+            widget.destroy()
+
+        # Заголовок
+        self.label = ctk.CTkLabel(self, text_color="black", text="Транзакции", 
+                                   font=("Arial", 18, "bold"))
+        self.label.grid(row=0, column=0, columnspan=4, padx=20, pady=20, sticky="w")
+
+        # Получаем данные
         trans_cat_model = session.query(CategoriesTable, TransactionsTable
                                 ).join(TransactionsTable, TransactionsTable.category_id == CategoriesTable.category_id
                                 ).order_by(desc(TransactionsTable.transaction_date_time)).all()
 
         for i, (cat, trans) in enumerate(trans_cat_model):
+            row = i + 1  # +1 из-за заголовка
+            
+            # Иконка категории
             icon_image = ctk.CTkImage(light_image=recolor_icon(resource_path(
-                f"assets/{cat.icon_url}"), cat.colour), size=(40, 40))
-            icon_label = ctk.CTkLabel(self, image=icon_image, text="", width=50, height=50)
-            icon_label.grid(row=i+1, column=0, padx=(10, 0), pady=10, sticky="nwe")
+                f"assets/{cat.icon_url}"), cat.colour), size=(35, 35))
+            icon_label = ctk.CTkLabel(self, image=icon_image, text="", width=40, height=40)
+            icon_label.grid(row=row, column=0, padx=(10, 5), pady=8, sticky="w")
 
-            transaction_name = ctk.CTkLabel(self, text_color="black", font=("Arial", 14), wraplength=120, justify="left",
-                                            text=trans.description if trans.description != "" else "<без комментария>")
-            transaction_name.grid(row=i+1, column=1, padx=5, pady=10, sticky="nw")
+            # Название/комментарий - с правильным переносом
+            comment_text = trans.description if trans.description and trans.description.strip() != "" else "—"
+            # Ограничиваем длину текста
+            if len(comment_text) > 25:
+                comment_text = comment_text[:22] + "..."
+                
+            transaction_name = ctk.CTkLabel(
+                self, 
+                text_color="black", 
+                font=("Arial", 13), 
+                text=comment_text,
+                wraplength=150,  # Ширина переноса
+                justify="left",
+                anchor="w"
+            )
+            transaction_name.grid(row=row, column=1, padx=(5, 5), pady=8, sticky="w")
 
-            date_label = ctk.CTkLabel(self, text=f"{trans.transaction_date_time.day}"
-                                                 f".0{trans.transaction_date_time.month}",
-                                      text_color="black", font=("Arial", 14))
-            date_label.grid(row=i+1, column=2, padx=(5, 0), pady=10, sticky="nw")
+            # Дата
+            date_str = f"{trans.transaction_date_time.day}.{trans.transaction_date_time.month:02d}"
+            date_label = ctk.CTkLabel(
+                self, 
+                text=date_str,
+                text_color="black", 
+                font=("Arial", 13),
+                anchor="e"
+            )
+            date_label.grid(row=row, column=2, padx=(5, 10), pady=8, sticky="e")
 
-            amount_label = ctk.CTkLabel(self, text=f"{trans.amount:,.2f}", font=("Arial", 14),
-                                        text_color="green" if cat.transaction_type == "Доход" else "red")
-            amount_label.grid(row=i+1, column=3, padx=(10, 0), pady=10, sticky="nw")
+            # Сумма
+            amount_color = "green" if cat.transaction_type == "Доход" else "red"
+            amount_label = ctk.CTkLabel(
+                self, 
+                text=f"{trans.amount:,.2f}", 
+                font=("Arial", 13, "bold"),
+                text_color=amount_color,
+                anchor="e"
+            )
+            amount_label.grid(row=row, column=3, padx=(5, 15), pady=8, sticky="e")
 
 
 class AccountsPage(ctk.CTkFrame):

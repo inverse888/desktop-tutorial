@@ -16,10 +16,7 @@
 ```bash
 git clone https://github.com/inverse888/desktop-tutorial
 ```
-- Установить библиотеку PyInstaller
-```bash
-pip install pyinstaller
-```
+
 - Установить зависимости
 ```bash
 pip install -r requirements.txt
@@ -28,6 +25,10 @@ pip install -r requirements.txt
 - Создать базу данных postgresSql, таблицы и заполнить их
 ```
 открыть редактор запросов pgAdmin Tool и выполнить запросы из файла DB/practice_db_upd.sql
+```
+- Подключение к собственной БД
+```
+Открываете в папке проекста файл Database.ini и меняете name: "свой Логин" и Password: "свой Пароль"
 ```
 
 - собрать исполняемый файл

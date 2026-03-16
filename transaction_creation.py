@@ -201,7 +201,7 @@ class NewTransactionWindow(ctk.CTkToplevel):
         self.title("Создание транзакции")
 
         self.resizable(False, False)
-        self.protocol("WM_DELETE_WINDOW", self.withdraw)
+        self.protocol("WM_DELETE_WINDOW", self.safe_destroy)
         self.after(250, lambda: self.iconbitmap(resource_path("assets/icons/pay-per-click.ico")))
 
         self.configure(fg_color="#aba6a6")
@@ -217,6 +217,7 @@ class NewTransactionWindow(ctk.CTkToplevel):
         self.pop_up_calendar.withdraw()
         self.transaction_date = None
         self.app_instance = app_instance
+        self._destroying = False  # Флаг для предотвращения повторного уничтожения
 
         ############## ACC BUTTONS ####################
         self.cat_acc_buttons = ButtonsFrame(self, income_button_text="Счета", expenses_button_text="Категории",
@@ -235,8 +236,8 @@ class NewTransactionWindow(ctk.CTkToplevel):
         self.inc_exp_cats_button.grid(row=0, column=2, columnspan=2, sticky="ns", padx=10, pady=(20, 30))
 
         ############### AMOUNT ###################
-        self.amount_entry = FormattedEntry(self, text_color="black", accepted="number",
-                                           placeholder_text="Сумма", placeholder_text_color="grey")
+        self.amount_entry = FormattedEntry(self, text_color="white", accepted="number",
+                                           placeholder_text="Сумма", placeholder_text_color="white")
         self.amount_entry.grid(row=1, column=3, sticky="nwe", padx=20, pady=5)
         
         ################ RECEIPT ##################
@@ -248,18 +249,12 @@ class NewTransactionWindow(ctk.CTkToplevel):
         self.receipt_label.grid(row=1, column=3, sticky="e", padx=20, pady=30)
         
         ############### COMMENT ###################
-        self.comment_entry = ctk.CTkEntry(self, text_color="black", placeholder_text_color="grey",
+        self.comment_entry = ctk.CTkEntry(self, text_color="white", placeholder_text_color="white",
                                            placeholder_text="Комментарий")
         self.comment_entry.grid(row=1, column=3, sticky="swe", padx=20, pady=5)
 
-       
-        
         self.selected_receipt_data = None  # Для хранения бинарных данных чека
         ################# CALENDAR #################
-        
-        # self.receipt_entry = ctk.CTkEntry(self, text_color="black", placeholder_text_color="black",
-                                           # placeholder_text="Файл чека (с расширением .jpg/.png)")
-        # self.receipt_entry.grid(row=1, column=3, sticky="we", padx=20, pady=5)
 
         self.calendar_button = ctk.CTkButton(self, text_color="black",  text="Выбрать дату",
                                              command=lambda: open_pop_up_calendar(self, False))
@@ -315,97 +310,177 @@ class NewTransactionWindow(ctk.CTkToplevel):
                 self.receipt_label.configure(text="Чек не выбран")
                 
     def add_transaction(self):
+        if self._destroying:
+            return
+            
+        # Получаем выбранные значения
         account_name = self.cat_acc_frame.selected_account_name
         category_name = self.cat_acc_frame.selected_category_name
         category_type = self.cat_acc_frame.cat_status
 
+        # Получаем дату
         if self.pop_up_calendar and self.pop_up_calendar.frame and self.pop_up_calendar.frame.date_range \
                 and self.pop_up_calendar.frame.date_range[0]:
             date = datetime.datetime.combine(self.pop_up_calendar.frame.date_range[0], datetime.time.min).date()
         else:
             date = datetime.date.today()
 
+        # Получаем время
         hours = int(self.hour_entry.get()) if self.hour_entry.get() else 0
         minutes = int(self.minute_entry.get()) if self.minute_entry.get() else 0
         seconds = int(self.second_entry.get()) if self.second_entry.get() else 0
+        
+        # Проверка корректности времени
         if not 0 <= hours < 24 or not 0 <= minutes < 60 or not 0 <= seconds < 60:
             CTkMessagebox.messagebox(title="Ошибка!", text="Неверное время!")
             return
 
-        date_time = datetime.datetime.combine(date, datetime.time(
-                int(self.hour_entry.get() or 0),
-                int(self.minute_entry.get() or 0),
-                int(self.second_entry.get() or 0)
-            ))
+        # Формируем дату и время
+        date_time = datetime.datetime.combine(date, datetime.time(hours, minutes, seconds))
 
-        amount = self.amount_entry.get()
+        # Получаем сумму
+        amount_str = self.amount_entry.get()
         description = self.comment_entry.get()
 
-        # receipt_name = (resource_path(f"assets/receipts/{self.receipt_entry.get()}")
-                        # if len(self.receipt_entry.get()) > 0 else None)
-
+        # Проверки
         if not account_name:
-            CTkMessagebox.messagebox(title="Ошибка!", text="Выберите иконку счёта!")
+            CTkMessagebox.messagebox(title="Ошибка!", text="Выберите счёт!")
             return
-        if not amount:
+        
+        if not amount_str:
             CTkMessagebox.messagebox(title="Ошибка!", text="Введите сумму!")
             return
-        if not date:
-            CTkMessagebox.messagebox(title="Ошибка!", text="Укажите дату!")
+        
+        # Преобразование суммы
+        try:
+            amount_str = amount_str.replace(',', '.')
+            amount = Decimal(amount_str)
+        except:
+            CTkMessagebox.messagebox(title="Ошибка!", text="Некорректный формат суммы!")
             return
-        if not category_name and category_type == self.expenses_button_text:
-            CTkMessagebox.messagebox(title="Ошибка!", text="Укажите категорию!")
+        
+        # Проверка положительности суммы
+        if amount <= 0:
+            CTkMessagebox.messagebox(title="Ошибка!", text="Сумма должна быть больше нуля!")
             return
-      
+        
+        # Для расхода проверяем наличие категории
+        if category_type == self.expenses_button_text and not category_name:
+            CTkMessagebox.messagebox(title="Ошибка!", text="Укажите категорию расхода!")
+            return
 
+        # Получаем объекты из БД
         account = session.query(AccountsTable).filter_by(description=account_name).first()
-        category = session.query(CategoriesTable).filter_by(category_name=category_name).first()
+        
+        if not account:
+            CTkMessagebox.messagebox(title="Ошибка!", text="Счёт не найден!")
+            return
 
+        # Для расхода проверяем категорию и достаточность средств
+        category = None
+        if category_name:
+            category = session.query(CategoriesTable).filter_by(category_name=category_name).first()
+            if not category:
+                CTkMessagebox.messagebox(title="Ошибка!", text="Категория не найдена!")
+                return
+
+        # Проверка достаточности средств для расхода
+        if category_type == self.expenses_button_text and account.amount < amount:
+            CTkMessagebox.messagebox(title="Ошибка!", text=f"Недостаточно средств на счёте {account_name}!")
+            return
+
+        # Создаем транзакцию
         transaction = TransactionsTable(
             transaction_date_time=date_time,
             transaction_type=category_type,
             amount=float(amount),
             description=description,
             account_id=account.account_id,
-            category_id=category.category_id,
-            #check_photo_url=receipt_name
+            category_id=category.category_id if category else None,
             check_photo=self.selected_receipt_data
         )
 
-        amount = Decimal(self.amount_entry.amount)
+        # Обновляем баланс счета
         if category_type == self.expenses_button_text:
             account.amount -= amount
         else:
             account.amount += amount
 
+        # Сохраняем в БД
         session.add(transaction)
         session.commit()
 
+        # Обновляем интерфейс
         if self.app_instance:
             self.app_instance.update_transactions()
-        self._destroy()
+            if hasattr(self.app_instance, 'update_transfers'):
+                self.app_instance.update_transfers()
+
+        # Показываем сообщение об успехе
+        CTkMessagebox.messagebox(title="Успех!", text="Транзакция успешно добавлена!")
+
+        # Закрываем окно с задержкой
+        self.after(100, self.safe_destroy)
+
+    def safe_destroy(self):
+        """Безопасное уничтожение окна"""
+        if self._destroying:
+            return
+        
+        self._destroying = True
+        
+        try:
+            # Отключаем все возможные события фокуса
+            self.attributes('-topmost', False)
+            
+            # Отвязываем все события
+            try:
+                self.unbind_all("<<DateSelected>>")
+            except:
+                pass
+            
+            # Уничтожаем дочерние окна
+            if hasattr(self, 'pop_up_calendar') and self.pop_up_calendar is not None:
+                try:
+                    if self.pop_up_calendar.winfo_exists():
+                        self.pop_up_calendar.destroy()
+                except:
+                    pass
+                finally:
+                    self.pop_up_calendar = None
+            
+            # Уничтожаем основное окно
+            try:
+                if self.winfo_exists():
+                    self.destroy()
+            except:
+                pass
+                
+        except Exception as e:
+            print(f"Ошибка при уничтожении окна: {e}")
+        finally:
+            self._destroying = False
 
     def change_state(self):
+        if self._destroying:
+            return
         self.cat_acc_frame.cat_status = "Расход" if self.cat_acc_frame.cat_status == "Доход" else "Доход"
         self.inc_exp_cats_button.configure(text=self.cat_acc_frame.cat_status)
         self.cat_acc_frame.update_display()
 
-    def _destroy(self):
-        self.destroy()
-        if self.pop_up_calendar is not None and self.pop_up_calendar.winfo_exists():
-            self.pop_up_calendar.destroy()
-
     def show_cat_acc_by_status(self, status):
+        if self._destroying:
+            return
         self.status = status
         self.cat_acc_frame.status = status
         self.cat_acc_frame.update_display()
 
     def update_text(self):
+        if self._destroying:
+            return
         date_text = self.get_date_display_text()
         self.date_label.configure(text=date_text)
 
     def get_date_display_text(self):
         return datetime.date.today().strftime("%d.%m.%Y") \
             if self.transaction_date is None else self.transaction_date[0].strftime("%d.%m.%Y")
-
-

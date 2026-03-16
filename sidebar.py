@@ -50,16 +50,38 @@ class SideBar(ctk.CTkFrame):
         self.new_transaction = None
 
     def open_new_transaction(self):
-        if self.new_transaction is None or not self.new_transaction.winfo_exists():
+        try:
+            # Проверяем существует ли окно и не уничтожено ли оно
+            if self.new_transaction is not None:
+                try:
+                    if self.new_transaction.winfo_exists():
+                        self.new_transaction.deiconify()
+                        self.new_transaction.lift()
+                        self.new_transaction.focus_force()
+                        return
+                except:
+                    # Если ошибка при проверке, создаем новое окно
+                    self.new_transaction = None
+            
+            # Создаем новое окно
             self.new_transaction = NewTransactionWindow(self.master)
             self.new_transaction.attributes('-topmost', True)
-        if self.new_transaction.winfo_exists():
             self.new_transaction.deiconify()
-
-        self.new_transaction.update()
-        self.new_transaction.focus()
-
-        self.new_transaction.bind("<<DateSelected>>", lambda x: self.close_pop_up_window())
+            self.new_transaction.lift()
+            self.new_transaction.focus_force()
+            
+            # Привязываем событие закрытия
+            self.new_transaction.protocol("WM_DELETE_WINDOW", self.close_pop_up_window)
+            
+        except Exception as e:
+            print(f"Ошибка при открытии окна: {e}")
+            self.new_transaction = None
 
     def close_pop_up_window(self):
-        self.new_transaction.destroy()
+        try:
+            if self.new_transaction is not None:
+                if self.new_transaction.winfo_exists():
+                    self.new_transaction.destroy()
+                self.new_transaction = None
+        except:
+            self.new_transaction = None

@@ -1,15 +1,90 @@
+import os
+import configparser
+from pathlib import Path
 from sqlalchemy import (create_engine, Text, Column, Integer, Numeric,
                         String, DateTime, ForeignKey, LargeBinary)
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 import datetime
 
-# Импортируем конфигурацию из отдельного файла
-from db_config import get_connection_string
+# Функция для получения строки подключения из .ini файла
+def get_connection_string():
+    """
+    Читает параметры подключения из database.ini файла
+    и возвращает строку подключения для SQLAlchemy
+    """
+    # Пути, где может находиться файл конфигурации
+    config_paths = [
+        Path('database.ini'),  # В текущей директории
+        Path(__file__).parent / 'database.ini',  # Рядом с текущим файлом
+        Path.home() / '.finances' / 'database.ini',  # В домашней директории пользователя
+    ]
+    
+    # Ищем файл конфигурации
+    config_file = None
+    for path in config_paths:
+        if path.exists():
+            config_file = path
+            break
+    
+    # Если файл не найден, создаем его с параметрами по умолчанию
+    if not config_file:
+        print("⚠ Файл database.ini не найден. Создаю с параметрами по умолчанию...")
+        
+        # Создаем директорию для конфига в домашней папке
+        home_config_dir = Path.home() / '.finances'
+        home_config_dir.mkdir(exist_ok=True)
+        config_file = home_config_dir / 'database.ini'
+        
+        # Создаем конфигурационный файл
+        config = configparser.ConfigParser()
+        config['postgresql'] = {
+            'host': 'localhost',
+            'port': '5432',
+            'database': 'finances_accounting',
+            'user': 'postgres',
+            'password': '3648'
+        }
+        
+        with open(config_file, 'w', encoding='utf-8') as f:
+            config.write(f)
+        
+        print(f"✅ Файл конфигурации создан: {config_file}")
+        print("ℹ Отредактируйте его при необходимости")
+    
+    # Читаем конфигурацию
+    config = configparser.ConfigParser()
+    config.read(config_file, encoding='utf-8')
+    
+    # Проверяем наличие секции [postgresql]
+    if 'postgresql' not in config:
+        raise KeyError(f"Секция [postgresql] не найдена в файле {config_file}")
+    
+    # Получаем параметры с значениями по умолчанию
+    db_config = {
+        'host': config.get('postgresql', 'host', fallback='localhost'),
+        'port': config.get('postgresql', 'port', fallback='5432'),
+        'database': config.get('postgresql', 'database', fallback='finances_accounting'),
+        'user': config.get('postgresql', 'user', fallback='postgres'),
+        'password': config.get('postgresql', 'password', fallback='3648'),
+    }
+    
+    # Формируем строку подключения
+    connection_string = f"postgresql+psycopg2://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['database']}"
+    
+    print(f"📊 Используется подключение: postgresql://{db_config['user']}@{db_config['host']}:{db_config['port']}/{db_config['database']}")
+    
+    return connection_string
 
-# Создаем подключение с использованием конфигурации из db_config.py
-engine = create_engine(get_connection_string())
+# Создаем подключение к базе данных
+try:
+    engine = create_engine(get_connection_string())
+    print("✅ Подключение к базе данных установлено")
+except Exception as e:
+    print(f"❌ Ошибка подключения к базе данных: {e}")
+    print("⚠ Использую параметры подключения по умолчанию...")
+    # Параметры по умолчанию для совместимости
+    engine = create_engine('postgresql+psycopg2://postgres:3648@localhost:5432/finances_accounting')
 
-#engine = create_engine('postgresql+psycopg2://postgres:3648@localhost:5432/finances_accounting')
 Session = sessionmaker(autoflush=False, bind=engine)
 session = Session()
 
