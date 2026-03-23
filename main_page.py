@@ -63,20 +63,48 @@ class CategoriesFrame(ctk.CTkScrollableFrame):
         self.update_frame()
 
     def update_frame(self):
-        for i, (cat, trans) in enumerate(session.query(CategoriesTable, TransactionsTable
-                                ).join(TransactionsTable, TransactionsTable.category_id == CategoriesTable.category_id
-                                ).order_by(desc(TransactionsTable.transaction_date_time)).all()):
-            image = ctk.CTkLabel(self, text="", image=ctk.CTkImage(light_image=recolor_icon(resource_path(
-                                 f"assets/{cat.icon_url}"), cat.colour),
-                size=(40, 40)))
+        # Очищаем существующие виджеты
+        for widget in self.winfo_children():
+            widget.destroy()
+        
+        # Получаем последние транзакции с актуальными данными категорий
+        latest_transactions = (
+            session.query(CategoriesTable, TransactionsTable)
+            .join(TransactionsTable, TransactionsTable.category_id == CategoriesTable.category_id)
+            .order_by(desc(TransactionsTable.transaction_date_time))
+            .limit(20)
+            .all()
+        )
+        
+        for i, (cat, trans) in enumerate(latest_transactions):
+            # Перекрашиваем иконку с актуальным цветом категории
+            image = ctk.CTkLabel(
+                self, 
+                text="", 
+                image=ctk.CTkImage(
+                    light_image=recolor_icon(
+                        resource_path(f"assets/{cat.icon_url}"), 
+                        cat.colour
+                    ),
+                    size=(40, 40)
+                )
+            )
             image.grid(row=i, column=0, padx=(20, 10), pady=5, sticky="w")
 
-            label = ctk.CTkLabel(self, text=cat.category_name, font=("Arial", 16),
-                                    text_color="black")
+            label = ctk.CTkLabel(
+                self, 
+                text=cat.category_name, 
+                font=("Arial", 16),
+                text_color="black"
+            )
             label.grid(row=i, column=1, padx=(10, 10), pady=5, sticky="nsew")
 
-            amount = ctk.CTkLabel(self, text=f"{trans.amount:,.2f}", font=("Arial", 16),
-                                    text_color="black")
+            amount = ctk.CTkLabel(
+                self, 
+                text=f"{trans.amount:,.2f}", 
+                font=("Arial", 16),
+                text_color="black"
+            )
             amount.grid(row=i, column=2, padx=(10, 20), pady=5, sticky="e")
 
 
@@ -103,7 +131,21 @@ class StatsFrame(ctk.CTkFrame):
         self.show_in_date_label(master)
         self.date_label.grid(sticky="nsew", padx=20, pady=20)
 
-        self.results = (
+        self.master_ref = master
+        self.pie = None
+        
+        # Запускаем создание диаграммы с задержкой
+        self.after(300, self.init_pie_chart)
+
+    def init_pie_chart(self):
+        """Создает диаграмму после загрузки окна"""
+        if not hasattr(self.master_ref, 'transaction_date'):
+            return
+            
+        date_from = self.master_ref.transaction_date[0]
+        date_to = self.master_ref.transaction_date[1]
+        
+        results = (
             session.query(
                 CategoriesTable.category_name,
                 CategoriesTable.icon_url,
@@ -113,19 +155,72 @@ class StatsFrame(ctk.CTkFrame):
             .join(TransactionsTable, TransactionsTable.category_id == CategoriesTable.category_id)
             .filter(
                 TransactionsTable.transaction_type == 'Расход',
-                TransactionsTable.transaction_date_time >=
-                                        datetime.datetime.now() - datetime.timedelta(days=self.days_delta)
+                cast(TransactionsTable.transaction_date_time, Date) >= date_from,
+                cast(TransactionsTable.transaction_date_time, Date) <= date_to
             )
             .group_by(CategoriesTable.category_id)
             .order_by(func.sum(TransactionsTable.amount).desc())
-        ).all()
-        categories_val = [row.total_amount for row in self.results]
-        categories_labels = [row.category_name for row in self.results]
-        categories_colors = [row.colour for row in self.results]
+            .all()
+        )
 
+        values = [float(row.total_amount) for row in results] 
+        labels = [row.category_name for row in results]
+        colors = [row.colour for row in results]
 
-        self.pie = MainPagePie(self, categories_val, categories_labels, categories_colors, "")
+        self.pie = MainPagePie(self, values, labels, colors, "")
         self.pie.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=20, pady=20)
+        
+        # Применяем фиксированное расположение многократно с увеличивающимися задержками
+        self.pie.after(100, self.pie.apply_fixed_layout)
+        self.pie.after(300, self.pie.apply_fixed_layout)
+        self.pie.after(500, self.pie.apply_fixed_layout)
+        self.pie.after(800, self.pie.apply_fixed_layout)
+        self.pie.after(1200, self.pie.apply_fixed_layout)
+        self.pie.after(2000, self.pie.apply_fixed_layout)
+
+    def force_fixed_layout(self):
+        """Принудительно применяет фиксированное расположение к диаграмме"""
+        if self.pie is not None and hasattr(self.pie, 'apply_fixed_layout'):
+            self.pie.apply_fixed_layout()
+
+    def update_pie_chart(self):
+        """Обновляет круговую диаграмму с актуальными данными"""
+        if not hasattr(self.master_ref, 'transaction_date'):
+            return
+            
+        date_from = self.master_ref.transaction_date[0]
+        date_to = self.master_ref.transaction_date[1]
+        
+        results = (
+            session.query(
+                CategoriesTable.category_name,
+                CategoriesTable.icon_url,
+                CategoriesTable.colour,
+                func.sum(TransactionsTable.amount).label("total_amount")
+            )
+            .join(TransactionsTable, TransactionsTable.category_id == CategoriesTable.category_id)
+            .filter(
+                TransactionsTable.transaction_type == 'Расход',
+                cast(TransactionsTable.transaction_date_time, Date) >= date_from,
+                cast(TransactionsTable.transaction_date_time, Date) <= date_to
+            )
+            .group_by(CategoriesTable.category_id)
+            .order_by(func.sum(TransactionsTable.amount).desc())
+            .all()
+        )
+
+        values = [float(row.total_amount) for row in results] 
+        labels = [row.category_name for row in results]
+        colors = [row.colour for row in results]
+
+        if self.pie is not None and hasattr(self.pie, 'winfo_exists') and self.pie.winfo_exists():
+            self.pie.create_pie_chart(values, labels, colors, "")
+            if hasattr(self.pie, 'apply_fixed_layout'):
+                self.pie.after(100, self.pie.apply_fixed_layout)
+                self.pie.after(300, self.pie.apply_fixed_layout)
+                self.pie.after(500, self.pie.apply_fixed_layout)
+        else:
+            self.init_pie_chart()
 
     def show_in_date_label(self, master):
         if master.transaction_date[0] == master.transaction_date[1]:
@@ -177,6 +272,20 @@ class MainPage(ctk.CTkFrame):
 
         self.pop_up_calendar = PopUpCalendar(True)
         self.pop_up_calendar.withdraw()
+        
+        # Многократная фиксация положения после загрузки
+        self.after(400, self.fix_pie_position)
+        self.after(700, self.fix_pie_position)
+        self.after(1000, self.fix_pie_position)
+        self.after(1500, self.fix_pie_position)
+        self.after(2000, self.fix_pie_position)
+
+    def fix_pie_position(self):
+        """Принудительно фиксирует положение круговой диаграммы"""
+        if hasattr(self.stats_frame, 'pie') and self.stats_frame.pie is not None:
+            if hasattr(self.stats_frame.pie, 'apply_fixed_layout'):
+                self.stats_frame.pie.apply_fixed_layout()
+                self.stats_frame.pie.update_idletasks()
 
     def update_chart(self, dates: list[datetime.date], period=None):
         date_from = dates[0]
@@ -203,7 +312,13 @@ class MainPage(ctk.CTkFrame):
         labels = [row.category_name for row in results]
         colors = [row.colour for row in results]
 
-        self.stats_frame.pie.create_pie_chart(values, labels, colors, "")
+        # Обновляем диаграмму через stats_frame
+        if hasattr(self.stats_frame, 'pie') and self.stats_frame.pie is not None:
+            self.stats_frame.pie.create_pie_chart(values, labels, colors, "")
+            if hasattr(self.stats_frame.pie, 'apply_fixed_layout'):
+                self.stats_frame.pie.after(100, self.stats_frame.pie.apply_fixed_layout)
+                self.stats_frame.pie.after(300, self.stats_frame.pie.apply_fixed_layout)
+                self.stats_frame.pie.after(500, self.stats_frame.pie.apply_fixed_layout)
 
     def update_delta(self, days):
         self.stats_frame.days_delta = days
@@ -213,6 +328,21 @@ class MainPage(ctk.CTkFrame):
         self.stats_frame.show_in_date_label(self)
 
     def update_transactions(self):
-        self.update_chart(self.transaction_date, "Same")
-        self.categories_frame.update_frame()
-
+        """Обновляет круговую диаграмму и список категорий"""
+        try:
+            # Обновляем круговую диаграмму
+            self.update_chart(self.transaction_date, "Same")
+            
+            # Обновляем список категорий
+            if hasattr(self, 'categories_frame'):
+                self.categories_frame.update_frame()
+            
+            # Принудительно фиксируем положение диаграммы
+            if hasattr(self, 'stats_frame') and hasattr(self.stats_frame, 'pie'):
+                if hasattr(self.stats_frame.pie, 'apply_fixed_layout'):
+                    self.stats_frame.pie.apply_fixed_layout()
+            
+            self.update_idletasks()
+            
+        except Exception as e:
+            print(f"Ошибка при обновлении главной страницы: {e}")

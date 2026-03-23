@@ -9,7 +9,7 @@ from CustomTkinterMessagebox import CTkMessagebox
 from PIL import Image
 
 from db_management import AccountsTable, session, CategoriesTable, TransactionsTable
-from addition_classes import ToggleButton, app_color, FormattedEntry, resource_path
+from addition_classes import ToggleButton, app_color, resource_path, get_expense_data
 from main_page import open_pop_up_calendar
 from pop_up_calendar import PopUpCalendar
 
@@ -217,7 +217,7 @@ class NewTransactionWindow(ctk.CTkToplevel):
         self.pop_up_calendar.withdraw()
         self.transaction_date = None
         self.app_instance = app_instance
-        self._destroying = False  # Флаг для предотвращения повторного уничтожения
+        self._destroying = False
 
         ############## ACC BUTTONS ####################
         self.cat_acc_buttons = ButtonsFrame(self, income_button_text="Счета", expenses_button_text="Категории",
@@ -236,8 +236,8 @@ class NewTransactionWindow(ctk.CTkToplevel):
         self.inc_exp_cats_button.grid(row=0, column=2, columnspan=2, sticky="ns", padx=10, pady=(20, 30))
 
         ############### AMOUNT ###################
-        self.amount_entry = FormattedEntry(self, text_color="white", accepted="number",
-                                           placeholder_text="Сумма", placeholder_text_color="white")
+        self.amount_entry = ctk.CTkEntry(self, text_color="white", 
+                                         placeholder_text="Сумма", placeholder_text_color="gray")
         self.amount_entry.grid(row=1, column=3, sticky="nwe", padx=20, pady=5)
         
         ################ RECEIPT ##################
@@ -245,24 +245,18 @@ class NewTransactionWindow(ctk.CTkToplevel):
                                            command=self.select_receipt_file)
         self.receipt_button.grid(row=1, column=3, sticky="w", padx=20, pady=5)
         
-        self.receipt_label = ctk.CTkLabel(self, text_color="black", text="Чек не выбран")
-        self.receipt_label.grid(row=1, column=3, sticky="e", padx=20, pady=30)
-        
         ############### COMMENT ###################
-        self.comment_entry = ctk.CTkEntry(self, text_color="white", placeholder_text_color="white",
+        self.comment_entry = ctk.CTkEntry(self, text_color="white", placeholder_text_color="gray",
                                            placeholder_text="Комментарий")
         self.comment_entry.grid(row=1, column=3, sticky="swe", padx=20, pady=5)
 
-        self.selected_receipt_data = None  # Для хранения бинарных данных чека
+        self.selected_receipt_data = None
+        self.selected_receipt_path = None
+        
         ################# CALENDAR #################
-
-        self.calendar_button = ctk.CTkButton(self, text_color="black",  text="Выбрать дату",
+        self.calendar_button = ctk.CTkButton(self, text_color="black", text=self.get_date_display_text(),
                                              command=lambda: open_pop_up_calendar(self, False))
         self.calendar_button.grid(row=2, column=3, sticky="nw", padx=20, pady=5)
-
-        ##################################
-        self.date_label = ctk.CTkLabel(self, text_color="black", text=self.get_date_display_text())
-        self.date_label.grid(row=2, column=3, sticky="ne", padx=10, pady=5)
 
         ##################################
         self.hour_label = ctk.CTkLabel(self, text_color="black", text="Часы")
@@ -275,19 +269,29 @@ class NewTransactionWindow(ctk.CTkToplevel):
         self.second_label.grid(row=3, column=3, sticky="e", padx=20, pady=0)
 
         ##################################
-        self.hour_entry = FormattedEntry(self, formatting=False, placeholder_text="00", width=60, accepted="number")
+        self.hour_entry = ctk.CTkEntry(self, placeholder_text="00", width=60, 
+                                       placeholder_text_color="gray")
         self.hour_entry.grid(row=4, column=3, sticky="w", padx=20)
 
-        self.minute_entry = FormattedEntry(self, formatting=False, placeholder_text="00", width=60, accepted="number")
+        self.minute_entry = ctk.CTkEntry(self, placeholder_text="00", width=60, 
+                                         placeholder_text_color="gray")
         self.minute_entry.grid(row=4, column=3, sticky="", padx=20)
 
-        self.second_entry = FormattedEntry(self, formatting=False, placeholder_text="00", width=60, accepted="number")
+        self.second_entry = ctk.CTkEntry(self, placeholder_text="00", width=60, 
+                                         placeholder_text_color="gray")
         self.second_entry.grid(row=4, column=3, sticky="e", padx=20)
 
         self.add_button = ctk.CTkButton(self, text_color="black", text="Добавить",
                                         command=self.add_transaction)
         self.add_button.grid(row=5, column=3, sticky="nsew", padx=20, pady=(10, 20))
+        
+        self.bind("<<DateSelected>>", self.update_date_display)
 
+    def update_date_display(self, event=None):
+        if self._destroying:
+            return
+        self.calendar_button.configure(text=self.get_date_display_text())
+    
     def select_receipt_file(self):
         file_path = filedialog.askopenfilename(
             title="Выберите файл чека",
@@ -296,53 +300,59 @@ class NewTransactionWindow(ctk.CTkToplevel):
         
         if file_path:
             try:
-                # Читаем файл как бинарные данные
                 with open(file_path, 'rb') as file:
                     self.selected_receipt_data = file.read()
                 
-                # Показываем имя файла в интерфейсе
-                file_name = os.path.basename(file_path)
-                self.receipt_label.configure(text=f"Чек: {file_name}")
+                self.selected_receipt_path = file_path
+                if len(file_path) > 40:
+                    display_text = "..." + file_path[-37:]
+                else:
+                    display_text = file_path
+                self.receipt_button.configure(text=display_text)
                 
             except Exception as e:
                 CTkMessagebox.messagebox(title="Ошибка!", text=f"Не удалось загрузить файл: {str(e)}")
                 self.selected_receipt_data = None
-                self.receipt_label.configure(text="Чек не выбран")
-                
+                self.selected_receipt_path = None
+                self.receipt_button.configure(text="Выбрать чек")
+    
     def add_transaction(self):
         if self._destroying:
             return
             
-        # Получаем выбранные значения
         account_name = self.cat_acc_frame.selected_account_name
         category_name = self.cat_acc_frame.selected_category_name
         category_type = self.cat_acc_frame.cat_status
 
-        # Получаем дату
         if self.pop_up_calendar and self.pop_up_calendar.frame and self.pop_up_calendar.frame.date_range \
                 and self.pop_up_calendar.frame.date_range[0]:
             date = datetime.datetime.combine(self.pop_up_calendar.frame.date_range[0], datetime.time.min).date()
         else:
             date = datetime.date.today()
 
-        # Получаем время
-        hours = int(self.hour_entry.get()) if self.hour_entry.get() else 0
-        minutes = int(self.minute_entry.get()) if self.minute_entry.get() else 0
-        seconds = int(self.second_entry.get()) if self.second_entry.get() else 0
+        hours_str = self.hour_entry.get()
+        minutes_str = self.minute_entry.get()
+        seconds_str = self.second_entry.get()
         
-        # Проверка корректности времени
-        if not 0 <= hours < 24 or not 0 <= minutes < 60 or not 0 <= seconds < 60:
-            CTkMessagebox.messagebox(title="Ошибка!", text="Неверное время!")
-            return
+        if not hours_str and not minutes_str and not seconds_str:
+            now = datetime.datetime.now()
+            hours = now.hour
+            minutes = now.minute
+            seconds = now.second
+        else:
+            hours = int(hours_str) if hours_str else 0
+            minutes = int(minutes_str) if minutes_str else 0
+            seconds = int(seconds_str) if seconds_str else 0
+            
+            if not 0 <= hours < 24 or not 0 <= minutes < 60 or not 0 <= seconds < 60:
+                CTkMessagebox.messagebox(title="Ошибка!", text="Неверное время!")
+                return
 
-        # Формируем дату и время
         date_time = datetime.datetime.combine(date, datetime.time(hours, minutes, seconds))
 
-        # Получаем сумму
         amount_str = self.amount_entry.get()
         description = self.comment_entry.get()
 
-        # Проверки
         if not account_name:
             CTkMessagebox.messagebox(title="Ошибка!", text="Выберите счёт!")
             return
@@ -351,7 +361,6 @@ class NewTransactionWindow(ctk.CTkToplevel):
             CTkMessagebox.messagebox(title="Ошибка!", text="Введите сумму!")
             return
         
-        # Преобразование суммы
         try:
             amount_str = amount_str.replace(',', '.')
             amount = Decimal(amount_str)
@@ -359,24 +368,20 @@ class NewTransactionWindow(ctk.CTkToplevel):
             CTkMessagebox.messagebox(title="Ошибка!", text="Некорректный формат суммы!")
             return
         
-        # Проверка положительности суммы
         if amount <= 0:
             CTkMessagebox.messagebox(title="Ошибка!", text="Сумма должна быть больше нуля!")
             return
         
-        # Для расхода проверяем наличие категории
         if category_type == self.expenses_button_text and not category_name:
             CTkMessagebox.messagebox(title="Ошибка!", text="Укажите категорию расхода!")
             return
 
-        # Получаем объекты из БД
         account = session.query(AccountsTable).filter_by(description=account_name).first()
         
         if not account:
             CTkMessagebox.messagebox(title="Ошибка!", text="Счёт не найден!")
             return
 
-        # Для расхода проверяем категорию и достаточность средств
         category = None
         if category_name:
             category = session.query(CategoriesTable).filter_by(category_name=category_name).first()
@@ -384,12 +389,10 @@ class NewTransactionWindow(ctk.CTkToplevel):
                 CTkMessagebox.messagebox(title="Ошибка!", text="Категория не найдена!")
                 return
 
-        # Проверка достаточности средств для расхода
         if category_type == self.expenses_button_text and account.amount < amount:
             CTkMessagebox.messagebox(title="Ошибка!", text=f"Недостаточно средств на счёте {account_name}!")
             return
 
-        # Создаем транзакцию
         transaction = TransactionsTable(
             transaction_date_time=date_time,
             transaction_type=category_type,
@@ -400,46 +403,68 @@ class NewTransactionWindow(ctk.CTkToplevel):
             check_photo=self.selected_receipt_data
         )
 
-        # Обновляем баланс счета
         if category_type == self.expenses_button_text:
             account.amount -= amount
         else:
             account.amount += amount
 
-        # Сохраняем в БД
         session.add(transaction)
         session.commit()
 
-        # Обновляем интерфейс
-        if self.app_instance:
-            self.app_instance.update_transactions()
-            if hasattr(self.app_instance, 'update_transfers'):
-                self.app_instance.update_transfers()
+        # Обновляем все страницы приложения
+        if self.app_instance and hasattr(self.app_instance, 'force_update_all'):
+            self.app_instance.force_update_all()
+        
+        # Дополнительно обновляем страницу счетов
+        if self.app_instance and hasattr(self.app_instance, 'pages'):
+            if 'accounts' in self.app_instance.pages:
+                # Обновляем фрейм счетов
+                if hasattr(self.app_instance.pages['accounts'], 'update_frame'):
+                    self.app_instance.pages['accounts'].update_frame()
+                
+                # Обновляем список транзакций на странице счетов
+                if hasattr(self.app_instance.pages['accounts'], 'transactions_frame'):
+                    if hasattr(self.app_instance.pages['accounts'].transactions_frame, 'update_frame'):
+                        self.app_instance.pages['accounts'].transactions_frame.update_frame()
+            
+            # Обновляем страницу транзакций
+            if 'transactions' in self.app_instance.pages:
+                if hasattr(self.app_instance.pages['transactions'], 'update_transactions'):
+                    self.app_instance.pages['transactions'].update_transactions()
+                if hasattr(self.app_instance.pages['transactions'], 'update_accounts_filter'):
+                    self.app_instance.pages['transactions'].update_accounts_filter()
+            
+            # Обновляем страницу расходов (график и доходы)
+            if 'expenses' in self.app_instance.pages:
+                if hasattr(self.app_instance.pages['expenses'], 'force_refresh'):
+                    self.app_instance.pages['expenses'].force_refresh()
+                if hasattr(self.app_instance.pages['expenses'], 'income_frame'):
+                    if hasattr(self.app_instance.pages['expenses'].income_frame, 'update_frame'):
+                        self.app_instance.pages['expenses'].income_frame.update_frame()
+            
+            # Обновляем главную страницу (круговая диаграмма)
+            if 'main' in self.app_instance.pages:
+                if hasattr(self.app_instance.pages['main'], 'update_transactions'):
+                    self.app_instance.pages['main'].update_transactions()
 
-        # Показываем сообщение об успехе
         CTkMessagebox.messagebox(title="Успех!", text="Транзакция успешно добавлена!")
 
-        # Закрываем окно с задержкой
         self.after(100, self.safe_destroy)
 
     def safe_destroy(self):
-        """Безопасное уничтожение окна"""
         if self._destroying:
             return
         
         self._destroying = True
         
         try:
-            # Отключаем все возможные события фокуса
             self.attributes('-topmost', False)
             
-            # Отвязываем все события
             try:
                 self.unbind_all("<<DateSelected>>")
             except:
                 pass
             
-            # Уничтожаем дочерние окна
             if hasattr(self, 'pop_up_calendar') and self.pop_up_calendar is not None:
                 try:
                     if self.pop_up_calendar.winfo_exists():
@@ -449,7 +474,6 @@ class NewTransactionWindow(ctk.CTkToplevel):
                 finally:
                     self.pop_up_calendar = None
             
-            # Уничтожаем основное окно
             try:
                 if self.winfo_exists():
                     self.destroy()
@@ -478,9 +502,10 @@ class NewTransactionWindow(ctk.CTkToplevel):
     def update_text(self):
         if self._destroying:
             return
-        date_text = self.get_date_display_text()
-        self.date_label.configure(text=date_text)
+        self.calendar_button.configure(text=self.get_date_display_text())
 
     def get_date_display_text(self):
-        return datetime.date.today().strftime("%d.%m.%Y") \
-            if self.transaction_date is None else self.transaction_date[0].strftime("%d.%m.%Y")
+        if self.transaction_date is not None and self.transaction_date[0]:
+            return self.transaction_date[0].strftime("%d.%m.%Y")
+        else:
+            return datetime.date.today().strftime("%d.%m.%Y")

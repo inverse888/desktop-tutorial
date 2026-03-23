@@ -8,7 +8,55 @@ from PIL import Image, ImageColor
 
 from addition_classes import ToggleButton, FormattedEntry, resource_path
 from db_management import session, CategoriesTable
-from transaction_creation import ButtonsFrame
+
+# Убираем импорт ButtonsFrame из transaction_creation, чтобы избежать циклического импорта
+# Вместо этого создадим простую кнопочную панель прямо здесь
+
+
+class ButtonsFrame(ctk.CTkFrame):
+    """Класс для кнопок Доход/Расход"""
+    def __init__(self, master, income_button_text, expenses_button_text, status_change_callback=None, **kwargs):
+        super().__init__(master, **kwargs)
+        self.status_change_callback = status_change_callback
+
+        self.configure(fg_color="#aba6a6")
+        self.grid_propagate(True)
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure((0, 1), weight=1)
+
+        self.income_button_text = income_button_text
+        self.expenses_button_text = expenses_button_text
+
+        self.status = "Расход"
+        app_color = {
+            "dark_blue": "#08375c",
+            "blue": "#1f6aa5"
+        }
+        self.selected_style = {"fg_color": app_color["dark_blue"], "text_color": "white"}
+        self.deselected_style = {"fg_color": app_color["blue"], "text_color": "black"}
+
+        self.income_button = ctk.CTkButton(self, text=income_button_text, font=("Arial", 16), corner_radius=10,
+                        command=lambda: self.toggle("Доход"), width=100, height=40, **self.deselected_style)
+        self.income_button.grid(row=0, column=0, sticky="nsew", padx=(0, 10), pady=20)
+
+        self.expenses_button = ctk.CTkButton(self, text=expenses_button_text, font=("Arial", 16), corner_radius=10,
+                        command=lambda: self.toggle("Расход"), width=100, height=40, **self.selected_style)
+        self.expenses_button.grid(row=0, column=1, sticky="nsew", padx=(10, 0), pady=20)
+
+    def toggle(self, selection):
+        if selection == self.status:
+            return
+
+        self.status = selection
+        if self.status_change_callback is not None:
+            self.status_change_callback(self.status)
+
+        if selection == "Доход":
+            self.income_button.configure(**self.selected_style)
+            self.expenses_button.configure(**self.deselected_style)
+        else:
+            self.income_button.configure(**self.deselected_style)
+            self.expenses_button.configure(**self.selected_style)
 
 
 def get_icon_names(folder_path: str) -> list[str]:
@@ -208,8 +256,13 @@ class CategoryCreationPage(ctk.CTkToplevel):
         self.exp_inc_buttons.grid(row=0, column=1, sticky="ew", padx=10, pady=10)
 
         # Название категории
-        self.name_entry = ctk.CTkEntry(self, placeholder_text="Название категории", 
-                                      placeholder_text_color="white", font=("Arial", 14))
+        self.name_entry = ctk.CTkEntry(
+            self, 
+            placeholder_text="Название категории", 
+            placeholder_text_color="gray",
+            text_color="white", 
+            font=("Arial", 14)
+        )
         self.name_entry.grid(row=1, column=1, sticky="nwe", padx=10, pady=10)
 
         # Палитра цветов
@@ -232,7 +285,7 @@ class CategoryCreationPage(ctk.CTkToplevel):
             text="", 
             width=40, 
             height=30,
-            fg_color="#808080",  # Серый по умолчанию
+            fg_color="#808080",
             corner_radius=5
         )
         self.color_display.grid(row=0, column=0, padx=(0, 10), sticky="w")
@@ -241,8 +294,10 @@ class CategoryCreationPage(ctk.CTkToplevel):
         self.color_entry = ctk.CTkEntry(
             self.color_preview_frame,
             placeholder_text="Пример: #96CEB4",
-            placeholder_text_color="white",
-            justify="center", font=("Arial", 14)
+            placeholder_text_color="gray",
+            text_color="white",
+            justify="center", 
+            font=("Arial", 14)
         )
         self.color_entry.grid(row=0, column=1, sticky="ew", padx=(0, 0))
         
@@ -271,20 +326,16 @@ class CategoryCreationPage(ctk.CTkToplevel):
         if not color_text:
             return False
         
-        # Должен начинаться с #
         if not color_text.startswith("#"):
             return False
         
-        # Проверяем длину (3, 6 или 8 символов после #)
-        if len(color_text) not in [4, 7, 9]:  # #RGB, #RRGGBB, #RRGGBBAA
+        if len(color_text) not in [4, 7, 9]:
             return False
         
-        # Проверяем допустимые символы
         valid_chars = set("#0123456789abcdefABCDEF")
         if not all(c in valid_chars for c in color_text[1:]):
             return False
         
-        # Проверяем, можно ли преобразовать в цвет
         try:
             ImageColor.getrgb(color_text)
             return True
@@ -296,58 +347,42 @@ class CategoryCreationPage(ctk.CTkToplevel):
         color_text = self.color_entry.get().strip()
         
         if not color_text:
-            # Если поле пустое, сбрасываем цвет
             self.color_display.configure(fg_color="#808080")
             self.selected_color = None
             return
         
-        # Пробуем добавить # если его нет
         if not color_text.startswith("#") and len(color_text) in [3, 6, 8]:
             color_text = "#" + color_text
             self.color_entry.delete(0, "end")
             self.color_entry.insert(0, color_text)
         
-        # Проверяем валидность цвета
         if self.validate_hex_color(color_text):
             try:
-                # Устанавливаем цвет
                 self.update_color_preview(color_text)
                 
-                # Обновляем палитру, если такой цвет есть
                 for button in self.color_palette.color_buttons:
                     if button.cget("fg_color").lower() == color_text.lower():
                         button.select()
                         break
             except ValueError:
-                # Неправильный цвет
                 pass
-        else:
-            # Если цвет невалидный, не обновляем цветной квадратик
-            # но оставляем текст в поле ввода для редактирования
-            pass
 
     def update_color_preview(self, color):
         """Обновляет отображение выбранного цвета"""
-        self.selected_color = color  # Сохраняем выбранный цвет
+        self.selected_color = color
         self.color_display.configure(fg_color=color)
         
-        # Обновляем текст в поле ввода, если он не совпадает
         current_text = self.color_entry.get().strip()
         if current_text.upper() != color.upper():
             self.color_entry.delete(0, "end")
             self.color_entry.insert(0, color.upper())
         
-        # Обновляем цвет иконок
         self.icons_list.update_icons_color(color)
 
     def update_icons_list(self):
-        """
-        Обновляет список доступных иконок при добавлении новых
-        """
-        # Просто вызываем метод обновления у icons_list
+        """Обновляет список доступных иконок при добавлении новых"""
         self.icons_list.update_icons_list()
         
-        # Обновляем цвета иконок, если выбран цвет
         if self.selected_color:
             self.icons_list.update_icons_color(self.selected_color)
 
@@ -355,8 +390,6 @@ class CategoryCreationPage(ctk.CTkToplevel):
         new_name = self.name_entry.get()
         new_category_type = self.exp_inc_buttons.status
         new_icon_name = self.icons_list.selected_name
-        
-        # Получаем цвет из поля ввода
         new_color = self.color_entry.get().strip()
 
         if not new_icon_name:
@@ -369,12 +402,10 @@ class CategoryCreationPage(ctk.CTkToplevel):
             CTkMessagebox.messagebox(title="Ошибка!", text="Выберите или введите цвет для категории!")
             return
         
-        # Проверяем валидность цвета
         if not self.validate_hex_color(new_color):
             CTkMessagebox.messagebox(title="Ошибка!", text="Введите корректный цвет в формате HEX!")
             return
 
-        # Проверяем существование категории с таким названием и типом
         existing = session.query(CategoriesTable).filter_by(
             category_name=new_name,
             transaction_type=new_category_type
@@ -394,121 +425,21 @@ class CategoryCreationPage(ctk.CTkToplevel):
             session.add(category)
             session.commit()
             
-            # Показываем сообщение об успехе
-            self._show_success_dialog("Успех", f"Категория '{new_name}' успешно создана!")
+            CTkMessagebox.messagebox(title="Успех!", text=f"Категория '{new_name}' успешно создана!")
             
-            # Вызываем callback для обновления списка категорий
             if self.save_callback:
                 self.save_callback()
             
-            # Обновляем категории в главном приложении
             if hasattr(self.master, 'update_categories'):
                 self.master.update_categories()
             elif hasattr(self.master, 'master') and hasattr(self.master.master, 'update_categories'):
                 self.master.master.update_categories()
             
-            # Закрываем окно
             self.destroy()
             
         except Exception as e:
             session.rollback()
-            self._show_error_dialog("Ошибка", f"Не удалось создать категорию: {str(e)}")
-    
-    def _show_success_dialog(self, title, message):
-        """Показывает увеличенный диалог успеха"""
-        success_window = ctk.CTkToplevel(self)
-        success_window.title(title)
-        success_window.geometry("550x300")
-        success_window.resizable(False, False)
-        success_window.transient(self)
-        success_window.grab_set()
-        
-        success_window.grid_columnconfigure(0, weight=1)
-        success_window.grid_rowconfigure(0, weight=1)
-        success_window.grid_rowconfigure(1, weight=0)
-        
-        # Контейнер для контента
-        content_frame = ctk.CTkFrame(success_window, fg_color="transparent")
-        content_frame.grid(row=0, column=0, sticky="nsew", padx=30, pady=30)
-        content_frame.grid_columnconfigure(0, weight=1)
-        
-        # Иконка успеха (текстовый символ)
-        icon_label = ctk.CTkLabel(content_frame, text="✅", font=("Arial", 48))
-        icon_label.grid(row=0, column=0, pady=(0, 20))
-        
-        # Текст успеха
-        success_text = ctk.CTkLabel(
-            content_frame, 
-            text=message,
-            font=("Arial", 16),
-            wraplength=450,
-            justify="center"
-        )
-        success_text.grid(row=1, column=0, pady=10)
-        
-        # Кнопка OK
-        ok_button = ctk.CTkButton(
-            success_window, 
-            text="OK", 
-            command=success_window.destroy,
-            font=("Arial", 14, "bold"),
-            height=45,
-            width=150
-        )
-        ok_button.grid(row=1, column=0, pady=20)
-        
-        # Центрируем окно
-        success_window.update_idletasks()
-        x = self.winfo_rootx() + (self.winfo_width() - success_window.winfo_width()) // 2
-        y = self.winfo_rooty() + (self.winfo_height() - success_window.winfo_height()) // 2
-        success_window.geometry(f"+{x}+{y}")
-    
-    def _show_error_dialog(self, title, message):
-        """Показывает увеличенный диалог ошибки"""
-        error_window = ctk.CTkToplevel(self)
-        error_window.title(title)
-        error_window.geometry("600x350")
-        error_window.resizable(False, False)
-        error_window.transient(self)
-        error_window.grab_set()
-        
-        error_window.grid_columnconfigure(0, weight=1)
-        error_window.grid_rowconfigure(0, weight=1)
-        error_window.grid_rowconfigure(1, weight=0)
-        
-        content_frame = ctk.CTkFrame(error_window, fg_color="transparent")
-        content_frame.grid(row=0, column=0, sticky="nsew", padx=30, pady=30)
-        content_frame.grid_columnconfigure(0, weight=1)
-        
-        # Иконка ошибки
-        icon_label = ctk.CTkLabel(content_frame, text="❌", font=("Arial", 48))
-        icon_label.grid(row=0, column=0, pady=(0, 20))
-        
-        error_text = ctk.CTkLabel(
-            content_frame,
-            text=message,
-            font=("Arial", 14),
-            wraplength=500,
-            justify="center",
-            text_color="#FF6B6B"
-        )
-        error_text.grid(row=1, column=0, pady=10)
-        
-        ok_button = ctk.CTkButton(
-            error_window, 
-            text="OK", 
-            command=error_window.destroy,
-            font=("Arial", 14, "bold"),
-            height=45,
-            width=150
-        )
-        ok_button.grid(row=1, column=0, pady=20)
-        
-        # Центрируем окно
-        error_window.update_idletasks()
-        x = self.winfo_rootx() + (self.winfo_width() - error_window.winfo_width()) // 2
-        y = self.winfo_rooty() + (self.winfo_height() - error_window.winfo_height()) // 2
-        error_window.geometry(f"+{x}+{y}")
+            CTkMessagebox.messagebox(title="Ошибка!", text=f"Не удалось создать категорию: {str(e)}")
 
     def on_close(self):
         self.destroy()

@@ -6,48 +6,98 @@ from transaction_creation import NewTransactionWindow
 class SideBar(ctk.CTkFrame):
     def __init__(self, master, show_function, **kwargs):
         super().__init__(master, **kwargs)
-        for i in range(8):  # Изменили с 7 на 8 для добавления новой кнопки
+        for i in range(8):
             self.grid_rowconfigure(i, weight=1)
 
         self.width = 60
         self.height = 60
+        self.show_function = show_function
+        self.current_page = "main"  # Текущая активная страница
 
-        self.main_button = ctk.CTkButton(self, width=self.width, height=self.height, text="", command=lambda: show_function("main"),
+        # Стили для кнопок
+        self.active_style = {
+            "fg_color": app_color["dark_blue"],  # Темно-синий для активной
+            "hover_color": app_color["dark_blue"]
+        }
+        self.inactive_style = {
+            "fg_color": "transparent",  # Прозрачный для неактивной
+            "hover_color": app_color["blue"]
+        }
+
+        # Кнопка "Главная"
+        self.main_button = ctk.CTkButton(self, width=self.width, height=self.height, text="", 
+            command=lambda: self._on_button_click("main"),
             image=(ctk.CTkImage(light_image=recolor_icon(resource_path("assets/icons/sidebar/house.png"),
-                                                                app_color["light_blue"]), size=(40,40))))
+                                app_color["light_blue"]), size=(40,40))),
+            **self.active_style)  # По умолчанию активна главная
         self.main_button.grid(row=0, column=0, padx=20, pady=20, sticky="we")
 
-        self.expenses_button = ctk.CTkButton(self, width=self.width, height=self.height, text="", command=lambda: show_function("expenses"),
+        # Кнопка "Расходы"
+        self.expenses_button = ctk.CTkButton(self, width=self.width, height=self.height, text="", 
+            command=lambda: self._on_button_click("expenses"),
             image=(ctk.CTkImage(light_image=recolor_icon(resource_path(
-                "assets/icons/sidebar/money-transaction.png"), app_color["light_blue"]), size=(40,40))))
+                "assets/icons/sidebar/money-transaction.png"), app_color["light_blue"]), size=(40,40))),
+            **self.inactive_style)
         self.expenses_button.grid(row=1, column=0, padx=20, pady=20, sticky="we")
 
-        self.accounts_button = ctk.CTkButton(self, width=self.width, height=self.height, text="", command=lambda: show_function("accounts"),
+        # Кнопка "Счета"
+        self.accounts_button = ctk.CTkButton(self, width=self.width, height=self.height, text="", 
+            command=lambda: self._on_button_click("accounts"),
             image=(ctk.CTkImage(light_image=recolor_icon(resource_path(
-                "assets/icons/sidebar/credit-card.png"), app_color["light_blue"]), size=(40,40))))
+                "assets/icons/sidebar/credit-card.png"), app_color["light_blue"]), size=(40,40))),
+            **self.inactive_style)
         self.accounts_button.grid(row=2, column=0, padx=20, pady=20, sticky="we")
 
+        # Кнопка "Транзакции"
         self.transactions_button = ctk.CTkButton(self, width=self.width, height=self.height, text="",
-                                            command=lambda: show_function("transactions"),
+            command=lambda: self._on_button_click("transactions"),
             image=(ctk.CTkImage(light_image=recolor_icon(resource_path(
-                "assets/icons/sidebar/currency.png"), app_color["light_blue"]), size=(40, 40))))
+                "assets/icons/sidebar/currency.png"), app_color["light_blue"]), size=(40, 40))),
+            **self.inactive_style)
         self.transactions_button.grid(row=3, column=0, padx=20, pady=20, sticky="we")
 
-        # Новая кнопка настроек
+        # Кнопка "Настройки"
         self.settings_button = ctk.CTkButton(self, width=self.width, height=self.height, text="", 
-                                            command=lambda: show_function("settings"),
+            command=lambda: self._on_button_click("settings"),
             image=(ctk.CTkImage(light_image=recolor_icon(resource_path(
-                "assets/icons/sidebar/settings.png"), app_color["light_blue"]), size=(40, 40))))
+                "assets/icons/sidebar/settings.png"), app_color["light_blue"]), size=(40, 40))),
+            **self.inactive_style)
         self.settings_button.grid(row=4, column=0, padx=20, pady=20, sticky="we")
 
+        # Кнопка "+" для создания транзакции (не подсвечивается)
         self.plus_button = ctk.CTkButton(self, width=self.width, height=self.height, text="",
                                          command=self.open_new_transaction,
                                          image=(ctk.CTkImage(light_image=recolor_icon(
                                              resource_path("assets/icons/sidebar/add.png"),
-                                                app_color["light_blue"]), size=(40, 40))))
+                                                app_color["light_blue"]), size=(40, 40))),
+                                         fg_color="transparent",
+                                         hover_color=app_color["blue"])
         self.plus_button.grid(row=5, column=0, padx=20, pady=20, sticky="swe")
 
         self.new_transaction = None
+        self.buttons = {
+            "main": self.main_button,
+            "expenses": self.expenses_button,
+            "accounts": self.accounts_button,
+            "transactions": self.transactions_button,
+            "settings": self.settings_button
+        }
+
+    def _on_button_click(self, page_name):
+        """Обработчик нажатия на кнопку"""
+        self.set_active_button(page_name)
+        self.show_function(page_name)
+
+    def set_active_button(self, page_name):
+        """Устанавливает активную кнопку"""
+        # Сбрасываем все кнопки на неактивный стиль
+        for name, button in self.buttons.items():
+            button.configure(**self.inactive_style)
+        
+        # Устанавливаем активную кнопку
+        if page_name in self.buttons:
+            self.buttons[page_name].configure(**self.active_style)
+            self.current_page = page_name
 
     def open_new_transaction(self):
         try:
@@ -60,7 +110,6 @@ class SideBar(ctk.CTkFrame):
                         self.new_transaction.focus_force()
                         return
                 except:
-                    # Если ошибка при проверке, создаем новое окно
                     self.new_transaction = None
             
             # Создаем новое окно
