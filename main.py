@@ -3,12 +3,11 @@ import warnings
 import matplotlib.pyplot as plt
 import customtkinter as ctk
 
-# Полностью отключаем автоматическую установку фокуса для всех виджетов
+# Безопасная установка фокуса
 original_focus_set = tk.Widget.focus_set
 original_focus_force = tk.Widget.focus_force if hasattr(tk.Widget, 'focus_force') else None
 
 def safe_focus_set(self):
-    """Безопасная установка фокуса"""
     try:
         if self and self.winfo_exists():
             try:
@@ -20,7 +19,6 @@ def safe_focus_set(self):
         pass
 
 def safe_focus_force(self):
-    """Безопасная принудительная установка фокуса"""
     try:
         if self and self.winfo_exists():
             try:
@@ -34,12 +32,10 @@ def safe_focus_force(self):
     except (tk.TclError, RuntimeError, AttributeError):
         pass
 
-# Применяем патчи
 tk.Widget.focus_set = safe_focus_set
 if original_focus_force:
     tk.Widget.focus_force = safe_focus_force
 
-# Игнорируем предупреждения
 warnings.filterwarnings("ignore")
 
 from category_creation import resource_path
@@ -99,48 +95,37 @@ class App(ctk.CTk):
         self.destroy()
 
     def _perform_full_update(self):
-        """Выполняет полное обновление всех страниц (оптимизированная версия)"""
+        """Выполняет полное обновление всех страниц"""
         try:
-            # Обновляем страницу счетов
+            # Страница счетов
             if hasattr(self.pages["accounts"], 'update_frame'):
                 self.pages["accounts"].update_frame()
-            
-            # Обновляем список транзакций на странице счетов
             if hasattr(self.pages["accounts"], 'transactions_frame'):
                 if hasattr(self.pages["accounts"].transactions_frame, 'update_frame'):
                     self.pages["accounts"].transactions_frame.update_frame()
             
-            # Обновляем транзакции на странице транзакций
+            # Страница транзакций
             if hasattr(self.pages["transactions"], 'update_transactions'):
                 self.pages["transactions"].update_transactions()
-            
-            # Обновляем фильтр на странице транзакций
             if hasattr(self.pages["transactions"], 'update_accounts_filter'):
                 self.pages["transactions"].update_accounts_filter()
-            
-            # Обновляем переводы
             if hasattr(self.pages["transactions"], 'update_transfers'):
                 self.pages["transactions"].update_transfers()
             
-            # Обновляем главную страницу (круговая диаграмма)
+            # Главная страница
             if hasattr(self.pages["main"], 'update_transactions'):
                 self.pages["main"].update_transactions()
             
-            # Обновляем график расходов
+            # Страница расходов
             if hasattr(self.pages["expenses"], 'force_refresh'):
                 self.pages["expenses"].force_refresh()
-            
-            # Обновляем список доходов
             if hasattr(self.pages["expenses"], 'income_frame'):
                 if hasattr(self.pages["expenses"].income_frame, 'update_frame'):
                     self.pages["expenses"].income_frame.update_frame()
-            
-            # Обновляем категории расходов
             if hasattr(self.pages["expenses"], 'categories_frame'):
                 if hasattr(self.pages["expenses"].categories_frame, 'update_categories'):
                     self.pages["expenses"].categories_frame.update_categories()
             
-            # Принудительно обновляем отображение только один раз
             self.update_idletasks()
                 
         except Exception as e:
@@ -154,11 +139,9 @@ class App(ctk.CTk):
         
         self._update_lock = True
         self._pending_update = False
-        
         self.after(200, self._execute_full_update)
     
     def _execute_full_update(self):
-        """Выполняет запланированное обновление"""
         try:
             self._perform_full_update()
         finally:
@@ -168,19 +151,15 @@ class App(ctk.CTk):
                 self.schedule_full_update()
 
     def update_transactions(self):
-        """Обновляет транзакции (вызывается извне)"""
         self.schedule_full_update()
 
     def update_transfers(self):
-        """Обновляет переводы (вызывается извне)"""
         self.schedule_full_update()
 
     def update_categories(self):
-        """Обновляет категории (вызывается извне)"""
         self.schedule_full_update()
 
     def update_accounts_filter(self):
-        """Обновляет фильтр счетов на странице транзакций"""
         if hasattr(self.pages, 'transactions') and hasattr(self.pages['transactions'], 'update_accounts_filter'):
             self.pages['transactions'].update_accounts_filter()
 
